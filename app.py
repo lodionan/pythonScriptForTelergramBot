@@ -1,21 +1,18 @@
 import os
-import asyncio
 import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
 REPO_OWNER = os.environ.get('REPO_OWNER')
 REPO_NAME = os.environ.get('REPO_NAME')
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('¡Hola! Envía /list, /add, o /remove para controlar el parental control de tu router.')
+def start(update, context):
+    context.bot.send_message(chat_id=update.effective_chat.id, text='¡Hola! Envía /list, /add, o /remove para controlar el parental control de tu router.')
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update, context):
     command = update.message.text.lower().strip()
     
-    # Mapear comandos
     action_map = {
         '/list': 'list',
         '/add': 'add', 
@@ -31,9 +28,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action = action_map.get(command)
     
     if action:
-        await update.message.reply_text(f'Ejecutando acción: {action}...')
+        context.bot.send_message(chat_id=update.effective_chat.id, text=f'Ejecutando acción: {action}...')
         
-        # Llamar a GitHub API
         url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows/parental-control.yml/dispatch'
         headers = {
             'Authorization': f'token {GITHUB_TOKEN}',
@@ -44,20 +40,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = requests.post(url, headers=headers, json=data)
         
         if response.status_code == 204:
-            await update.message.reply_text(f'✅ Acción {action} iniciada. Revisa el resultado en GitHub Actions.')
+            context.bot.send_message(chat_id=update.effective_chat.id, text=f'✅ Acción {action} iniciada.')
         else:
-            await update.message.reply_text(f'❌ Error: {response.status_code}')
+            context.bot.send_message(chat_id=update.effective_chat.id, text=f'❌ Error: {response.status_code}')
     else:
-        await update.message.reply_text('Comandos válidos: /list, /add, /remove')
+        context.bot.send_message(chat_id=update.effective_chat.id, text='Comandos válidos: /list, /add, /remove')
 
 def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    updater = Updater(TELEGRAM_TOKEN, use_context=True)
     
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    dispatcher = updater.dispatcher
+    dispatcher.add_handler(CommandHandler('start', start))
+    dispatcher.add_handler(MessageHandler(Filters.text, handle_message))
     
     print('Bot iniciado...')
-    asyncio.run(app.run_polling())
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == '__main__':
     main()
